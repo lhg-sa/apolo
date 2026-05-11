@@ -1,0 +1,15 @@
+[Unit]
+Description=Apolo Monitor (para Carbonio)
+After=network.target postfix.service
+
+[Service]
+Type=simple
+User=fraijanesgt
+Group=fraijanesgt
+WorkingDirectory=/home/fraijanesgt/apolo-monitor
+ExecStart=/usr/bin/python3 -u server.py
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
