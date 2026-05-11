@@ -1,0 +1,985 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Apolo Monitor</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+<style>
+*, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
+:root {
+    --bg: #000;
+    --bg-secondary: #0a0a0b;
+    --bg-card: #111113;
+    --bg-elevated: #18181b;
+    --border: #1f1f23;
+    --border-hover: #2f2f35;
+    --text: #fafafa;
+    --text-secondary: #a1a1aa;
+    --text-muted: #52525b;
+    --accent: #3b82f6;
+    --accent-hover: #2563eb;
+    --green: #22c55e;
+    --green-bg: rgba(34,197,94,0.1);
+    --red: #ef4444;
+    --red-bg: rgba(239,68,68,0.1);
+    --orange: #f59e0b;
+    --orange-bg: rgba(245,158,11,0.1);
+    --purple: #a855f7;
+    --cyan: #06b6d4;
+    --radius: 12px;
+    --radius-sm: 8px;
+    --shadow: 0 1px 3px rgba(0,0,0,0.5);
+}
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    -webkit-font-smoothing: antialiased;
+    line-height: 1.5;
+}
+#login-screen {
+    display:flex; justify-content:center; align-items:center; min-height:100vh;
+    background: radial-gradient(ellipse at 50% 50%, #0a0a0b 0%, #000 70%);
+}
+.login-box {
+    background: var(--bg-card); padding: 48px; border-radius: var(--radius);
+    border: 1px solid var(--border); width: 400px; max-width: 90vw;
+}
+.login-box h1 { text-align:center; font-size:22px; font-weight:600; letter-spacing:-0.5px; margin-bottom:4px; }
+.login-box h1 span { color: var(--accent); }
+.login-box p { text-align:center; color:var(--text-secondary); font-size:14px; margin-bottom:32px; }
+.login-box input {
+    width:100%; padding:12px 16px; background:var(--bg-secondary); border:1px solid var(--border);
+    border-radius:var(--radius-sm); color:var(--text); font-size:15px; outline:none; transition:border-color .2s;
+}
+.login-box input:focus { border-color: var(--accent); }
+.login-box button {
+    width:100%; padding:12px; margin-top:16px; background:var(--accent); color:#fff; border:none;
+    border-radius:var(--radius-sm); font-size:15px; font-weight:500; cursor:pointer; transition:background .2s;
+}
+.login-box button:hover { background:var(--accent-hover); }
+.login-error { color:var(--red); text-align:center; margin-top:12px; font-size:13px; display:none; }
+#dashboard { display:none; }
+
+.header {
+    background: var(--bg-secondary); border-bottom:1px solid var(--border); padding:0 24px;
+    height:56px; display:flex; align-items:center; justify-content:space-between; position:sticky; top:0; z-index:100;
+}
+.header-left { display:flex; align-items:center; gap:12px; }
+.header-left h1 { font-size:16px; font-weight:600; letter-spacing:-0.3px; }
+.header-left h1 span { color:var(--accent); }
+.header-badge {
+    font-size:11px; color:var(--text-muted); background:var(--bg-card); padding:3px 10px;
+    border-radius:20px; border:1px solid var(--border);
+}
+.header-right { display:flex; align-items:center; gap:16px; font-size:12px; color:var(--text-secondary); }
+.status-indicator { display:flex; align-items:center; gap:6px; }
+.status-dot { width:7px; height:7px; border-radius:50%; }
+.status-dot.online { background:var(--green); box-shadow:0 0 8px rgba(34,197,94,0.4); }
+
+.container { max-width:1440px; margin:0 auto; padding:24px; }
+.tabs-wrapper {
+    display:flex; gap:2px; margin-bottom:24px; background:var(--bg-card);
+    border-radius:var(--radius); border:1px solid var(--border); padding:4px; width:fit-content;
+}
+.tab-btn {
+    padding:8px 18px; cursor:pointer; color:var(--text-muted); font-size:13px; font-weight:500;
+    border:none; background:transparent; border-radius:var(--radius-sm);
+    transition:all .2s; white-space:nowrap;
+}
+.tab-btn:hover { color:var(--text-secondary); }
+.tab-btn.active { color:#fff; background:var(--accent); }
+.queue-badge { background:#ef4444; color:#fff; font-size:10px; font-weight:600; padding:1px 5px; border-radius:8px; margin-left:4px; vertical-align:top; }
+.tab-content { display:none; }
+.tab-content.active { display:block; }
+
+.card {
+    background:var(--bg-card); border:1px solid var(--border); border-radius:var(--radius);
+    padding:24px; transition:border-color .2s;
+}
+.card:hover { border-color:var(--border-hover); }
+.card-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; }
+.card-title { font-size:13px; font-weight:500; color:var(--text-secondary); text-transform:uppercase; letter-spacing:0.3px; }
+.card-subtitle { font-size:12px; color:var(--text-muted); }
+
+.grid { display:grid; gap:16px; }
+.grid-4 { grid-template-columns: repeat(4, 1fr); }
+.grid-3 { grid-template-columns: repeat(3, 1fr); }
+.grid-2 { grid-template-columns: repeat(2, 1fr); }
+
+.stat-card { padding:20px 24px; position:relative; overflow:hidden; }
+.stat-card .value { font-size:32px; font-weight:700; letter-spacing:-1px; line-height:1.1; margin-top:4px; }
+.stat-card .label { font-size:12px; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.5px; }
+.stat-card .meta { display:flex; gap:16px; margin-top:10px; font-size:12px; color:var(--text-secondary); }
+.stat-card .meta-item { display:flex; align-items:center; gap:4px; }
+.stat-card .meta-dot { width:6px; height:6px; border-radius:50%; }
+.stat-card .icon-bg {
+    position:absolute; top:16px; right:16px; width:40px; height:40px; border-radius:10px;
+    display:flex; align-items:center; justify-content:center; font-size:20px; opacity:0.15;
+}
+
+.chart-wrapper { position:relative; height:260px; }
+.chart-wrapper-sm { height:180px; }
+
+table { width:100%; border-collapse:collapse; font-size:13px; }
+th { text-align:left; padding:10px 12px; color:var(--text-muted); font-weight:500; font-size:11px;
+    text-transform:uppercase; letter-spacing:0.5px; border-bottom:1px solid var(--border); }
+td { padding:10px 12px; border-bottom:1px solid var(--border); color:var(--text-secondary); font-size:13px; }
+tr:last-child td { border-bottom:none; }
+tr:hover td { color:var(--text); }
+
+.badge {
+    display:inline-block; padding:2px 10px; border-radius:20px; font-size:11px; font-weight:500;
+}
+.badge-active { background:var(--green-bg); color:var(--green); }
+.badge-inactive { background:var(--red-bg); color:var(--red); }
+.badge-warning { background:var(--orange-bg); color:var(--orange); }
+
+.progress { display:flex; align-items:center; gap:12px; }
+.progress-bar { flex:1; height:6px; background:var(--bg-secondary); border-radius:3px; overflow:hidden; }
+.progress-fill { height:100%; border-radius:3px; transition:width .5s ease; }
+.progress-green { background:var(--green); }
+.progress-yellow { background:var(--orange); }
+.progress-red { background:var(--red); }
+.progress-value { font-size:14px; font-weight:600; min-width:40px; text-align:right; }
+
+.resource-grid { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+.resource-item { }
+.resource-label { font-size:11px; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.3px; }
+.resource-value { font-size:15px; font-weight:600; margin-top:2px; }
+
+.service-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(200px,1fr)); gap:6px; }
+.service-item {
+    padding:8px 12px; background:var(--bg-secondary); border-radius:var(--radius-sm);
+    border:1px solid var(--border); font-size:12px; display:flex; justify-content:space-between; align-items:center;
+}
+
+.live-table { font-size:12px; width:100%; }
+.live-table th { font-size:10px; padding:6px 8px; }
+.live-table td { padding:6px 8px; font-size:11px; white-space:nowrap; }
+.live-table td.max-w { max-width:180px; overflow:hidden; text-overflow:ellipsis; }
+.live-table .s-sent { color:var(--green); }
+.live-table .s-bounced { color:var(--red); font-weight:600; }
+.live-table .s-deferred { color:var(--orange); }
+.live-scroll { max-height:580px; overflow-y:auto; }
+.live-scroll::-webkit-scrollbar { width:5px; }
+.live-scroll::-webkit-scrollbar-track { background:transparent; }
+.live-scroll::-webkit-scrollbar-thumb { background:var(--border); border-radius:3px; }
+
+.alert-item {
+    padding:14px 16px; margin-bottom:8px; border-radius:var(--radius-sm);
+    border-left:4px solid; background:var(--bg-secondary);
+    transition:background .2s;
+}
+.alert-item:hover { background:var(--bg-elevated); }
+.alert-item.critical { border-left-color:var(--red); }
+.alert-item.high { border-left-color:var(--orange); }
+.alert-item.medium { border-left-color:var(--accent); }
+.alert-item.low { border-left-color:var(--text-muted); }
+.alert-top { display:flex; justify-content:space-between; align-items:center; margin-bottom:4px; }
+.alert-type {
+    font-size:10px; font-weight:600; text-transform:uppercase; letter-spacing:0.5px;
+    padding:2px 8px; border-radius:10px;
+}
+.alert-type.spam { background:var(--orange-bg); color:var(--orange); }
+.alert-type.auth { background:var(--red-bg); color:var(--red); }
+.alert-type.bounce { background:rgba(168,85,247,0.1); color:var(--purple); }
+.alert-time { font-size:11px; color:var(--text-muted); }
+.alert-title { font-size:14px; font-weight:600; margin-bottom:2px; }
+.alert-desc { font-size:12px; color:var(--text-secondary); }
+.alert-severity { font-size:10px; font-weight:600; text-transform:uppercase; }
+
+.btn-disable {
+    background:var(--red-bg); color:var(--red); border:1px solid rgba(239,68,68,0.3);
+    padding:4px 12px; border-radius:6px; cursor:pointer; font-size:11px; font-weight:500;
+    transition:all .2s;
+}
+.btn-disable:hover { background:var(--red); color:#fff; }
+.btn-disable:disabled { opacity:0.5; cursor:not-allowed; }
+.btn-unblock { background:var(--green-bg); color:var(--green); border:1px solid rgba(34,197,94,0.3); padding:4px 12px; border-radius:6px; cursor:pointer; font-size:11px; font-weight:500; transition:all .2s; }
+.btn-unblock:hover { background:var(--green); color:#fff; }
+.btn-unblock:disabled { opacity:0.5; cursor:not-allowed; }
+.auth-entry {
+    padding:10px 12px; margin-bottom:6px; border-radius:var(--radius-sm);
+    border-left:3px solid var(--border); background:var(--bg-secondary); font-size:12px;
+}
+.auth-entry.failed { border-left-color:var(--red); }
+.auth-entry.success { border-left-color:var(--green); }
+.auth-entry.warning { border-left-color:var(--orange); }
+
+@media (max-width:1024px) {
+    .grid-4 { grid-template-columns:repeat(2,1fr); }
+    .grid-2 { grid-template-columns:1fr; }
+    .grid-3 { grid-template-columns:1fr; }
+    .header-right { display:none; }
+    .tabs-wrapper { overflow-x:auto; max-width:100%; }
+}
+@media (max-width:600px) {
+    .grid-4 { grid-template-columns:1fr 1fr; }
+    .container { padding:12px; }
+    .stat-card .value { font-size:24px; }
+    .resource-grid { grid-template-columns:1fr; }
+}
+</style>
+</head>
+<body>
+<div id="login-screen">
+    <div class="login-box">
+        <h1><span>Apolo</span> Monitor</h1>
+        <p>Monitoreo de servidor Carbonio</p>
+        <input type="password" id="token-input" placeholder="Ingrese el token" autocomplete="off" autofocus>
+        <button onclick="login()">Ingresar</button>
+        <div class="login-error" id="login-error">Token invalido. Intente de nuevo.</div>
+    </div>
+</div>
+<div id="dashboard">
+    <div class="header">
+        <div class="header-left">
+            <h1><span>Apolo</span> Monitor</h1>
+            <span class="header-badge">v1.0</span>
+        </div>
+        <div class="header-right">
+            <span id="server-time"></span>
+            <span id="events-count"></span>
+            <span class="status-indicator"><span class="status-dot online"></span>En vivo</span>
+        </div>
+    </div>
+    <div class="container">
+        <div class="tabs-wrapper">
+            <button class="tab-btn active" data-tab="tab-summary">Resumen</button>
+            <button class="tab-btn" data-tab="tab-email">Correo <span id="queue-badge" class="queue-badge" style="display:none"></span></button>
+            <button class="tab-btn" data-tab="tab-live">Live Feed</button>
+            <button class="tab-btn" data-tab="tab-alerts">Alertas</button>
+            <button class="tab-btn" data-tab="tab-system">Sistema</button>
+            <button class="tab-btn" data-tab="tab-security">Seguridad</button>
+        </div>
+
+        <div id="tab-summary" class="tab-content active">
+            <div class="grid grid-4" id="summary-cards"></div>
+            <div style="margin-top:16px" class="grid grid-2">
+                <div class="card"><div class="card-header"><span class="card-title">Volumen de Correo (24h)</span></div><div class="chart-wrapper" id="chart-timeline"><canvas></canvas></div></div>
+                <div class="card"><div class="card-header"><span class="card-title">Trafico de Red</span></div><div class="chart-wrapper" id="chart-network"><canvas></canvas></div><div id="net-info" style="margin-top:8px"></div></div>
+            </div>
+            <div style="margin-top:16px" class="grid grid-2">
+                <div class="card"><div class="card-header"><span class="card-title">Recursos del Sistema</span></div><div id="system-resources"></div></div>
+                <div class="card"><div class="card-header"><span class="card-title">Servicios Carbonio</span><span id="service-count" class="card-subtitle"></span></div><div id="services-status" style="max-height:220px;overflow-y:auto"></div></div>
+            </div>
+        </div>
+
+        <div id="tab-email" class="tab-content">
+            <div class="grid grid-2">
+                <div class="card"><div class="card-header"><span class="card-title">Principales Remitentes (60min)</span></div><div class="chart-wrapper chart-wrapper-sm" id="chart-senders-60m"><canvas></canvas></div></div>
+                <div class="card"><div class="card-header"><span class="card-title">Principales Destinatarios (60min)</span></div><div class="chart-wrapper chart-wrapper-sm" id="chart-recipients-60m"><canvas></canvas></div></div>
+            </div>
+            <div style="margin-top:16px" class="grid grid-2">
+                <div class="card"><div class="card-header"><span class="card-title">Principales Remitentes (24h)</span></div><div class="chart-wrapper chart-wrapper-sm" id="chart-senders"><canvas></canvas></div></div>
+                <div class="card"><div class="card-header"><span class="card-title">Principales Destinatarios (24h)</span></div><div class="chart-wrapper chart-wrapper-sm" id="chart-recipients"><canvas></canvas></div></div>
+            </div>
+            <div style="margin-top:16px" class="grid grid-2">
+                <div class="card"><div class="card-header"><span class="card-title">Dominios Destino (24h)</span></div><div class="chart-wrapper chart-wrapper-sm" id="chart-domains"><canvas></canvas></div></div>
+                <div class="card"><div class="card-header"><span class="card-title">Estado de Entrega</span></div><div class="chart-wrapper chart-wrapper-sm" id="chart-delivery"><canvas></canvas></div></div>
+            </div>
+            <div style="margin-top:16px" class="grid grid-3">
+                <div class="card">
+                    <div class="card-header"><span class="card-title">Rebotes</span></div>
+                    <div style="font-size:32px;font-weight:700" id="bounce-rate">0%</div>
+                    <div style="font-size:12px;color:var(--text-muted);margin-top:4px" id="bounce-detail">0 enviados, 0 rebotados</div>
+                </div>
+                <div class="card">
+                    <div class="card-header"><span class="card-title">Tiempo Promedio Entrega</span></div>
+                    <div style="font-size:32px;font-weight:700" id="avg-delivery">0s</div>
+                    <div style="font-size:12px;color:var(--text-muted);margin-top:4px" id="delivery-detail">Min: 0s / Max: 0s</div>
+                </div>
+                <div class="card">
+                    <div class="card-header"><span class="card-title">Eventos en DB</span></div>
+                    <div style="font-size:32px;font-weight:700" id="db-events">0</div>
+                    <div style="font-size:12px;color:var(--text-muted);margin-top:4px" id="db-last-event">Ultimo: --</div>
+                </div>
+            </div>
+        </div>
+
+        <div id="tab-live" class="tab-content">
+            <div class="card">
+                <div class="card-header">
+                    <span class="card-title">Correos en Tiempo Real</span>
+                    <span id="live-count" class="card-subtitle">0 eventos</span>
+                </div>
+                <p style="font-size:12px;color:var(--text-muted);margin-bottom:12px">
+                    Monitoreo en vivo via <code style="background:var(--bg-secondary);padding:1px 5px;border-radius:3px;font-size:11px">tail -F /var/log/mail.log</code>.
+                    Los correos aparecen al ser procesados por Postfix.
+                    <span style="color:var(--orange)">El asunto no es registrado por Postfix por defecto.</span>
+                </p>
+                <div class="live-scroll">
+                    <table class="live-table">
+                        <thead><tr><th>Hora</th><th>Origen</th><th>Destino</th><th>IP</th><th>Tamanho</th><th>Dir</th><th>Estado</th><th>Retardo</th></tr></thead>
+                        <tbody id="live-feed-body"></tbody>
+                    </table>
+                </div>
+            </div>
+            <div style="margin-top:16px">
+                <div class="card">
+                    <div class="card-header">
+                        <span class="card-title">Usuarios Remitentes</span>
+                        <span id="accounts-count" class="card-subtitle"></span>
+                    </div>
+                    <p style="font-size:12px;color:var(--text-muted);margin-bottom:8px">
+                        Cuentas que mas correos han enviado. Click en <strong>Desactivar</strong> para bloquear la cuenta en Carbonio.
+                    </p>
+                    <div style="max-height:400px;overflow-y:auto">
+                        <table class="live-table">
+                            <thead><tr><th>Usuario</th><th>30 dias</th><th>24 horas</th><th>Accion</th></tr></thead>
+                            <tbody id="accounts-body"></tbody>
+                        </table>
+                    </div>
+                    <div id="disable-result" style="margin-top:8px;font-size:12px"></div>
+                </div>
+            </div>
+        </div>
+
+        <div id="tab-alerts" class="tab-content">
+            <div class="card">
+                <div class="card-header">
+                    <span class="card-title">Alertas de Seguridad</span>
+                    <div style="display:flex;gap:8px;align-items:center">
+                        <span id="alerts-count" class="card-subtitle"></span>
+                        <button onclick="fetchAlerts()" style="background:var(--bg-secondary);border:1px solid var(--border);color:var(--text-secondary);padding:5px 12px;border-radius:6px;cursor:pointer;font-size:11px">Refrescar</button>
+                    </div>
+                </div>
+                <p style="font-size:12px;color:var(--text-muted);margin-bottom:16px">
+                    Deteccion automatica de: envio masivo (&gt;5/h), ataques de autenticacion, tasa de rebotes alta.
+                </p>
+                <div id="alerts-list"></div>
+            </div>
+        </div>
+
+        <div id="tab-system" class="tab-content">
+            <div class="grid grid-3">
+                <div class="card">
+                    <div class="card-header"><span class="card-title">CPU</span></div>
+                    <div class="progress"><span class="progress-value" id="cpu-value">0%</span><div class="progress-bar"><div class="progress-fill" id="cpu-bar" style="width:0%"></div></div></div>
+                    <div style="font-size:11px;color:var(--text-muted);margin-top:8px" id="cpu-load">Load: 0.00 / 0.00 / 0.00</div>
+                </div>
+                <div class="card">
+                    <div class="card-header"><span class="card-title">Memoria RAM</span></div>
+                    <div class="progress"><span class="progress-value" id="mem-value">0%</span><div class="progress-bar"><div class="progress-fill" id="mem-bar" style="width:0%"></div></div></div>
+                    <div style="font-size:11px;color:var(--text-muted);margin-top:8px" id="mem-detail">0 GB / 0 GB</div>
+                </div>
+                <div class="card">
+                    <div class="card-header"><span class="card-title">Disco</span></div>
+                    <div class="progress"><span class="progress-value" id="disk-value">0%</span><div class="progress-bar"><div class="progress-fill" id="disk-bar" style="width:0%"></div></div></div>
+                    <div style="font-size:11px;color:var(--text-muted);margin-top:8px" id="disk-detail">0 GB / 0 GB</div>
+                </div>
+            </div>
+            <div style="margin-top:16px" class="grid grid-2">
+                <div class="card">
+                    <div class="card-header"><span class="card-title">Servicios Carbonio</span><span id="service-count-full" class="card-subtitle"></span></div>
+                    <div id="services-full" style="max-height:380px;overflow-y:auto"></div>
+                </div>
+                <div class="card">
+                    <div class="card-header"><span class="card-title">Sistema</span></div>
+                    <div class="resource-grid">
+                        <div><div class="resource-label">Uptime</div><div class="resource-value" id="uptime-value">--</div></div>
+                        <div><div class="resource-label">Procesos</div><div class="resource-value" id="procs-info">--</div></div>
+                        <div><div class="resource-label">Carga (1m)</div><div class="resource-value" id="load-1m">--</div></div>
+                        <div><div class="resource-label">Swap</div><div class="resource-value" id="swap-value">0%</div></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="tab-security" class="tab-content">
+            <div class="grid grid-3">
+                <div class="card"><div class="card-header"><span class="card-title">Auth Fallidas (24h)</span></div><div style="font-size:32px;font-weight:700" id="auth-fail-count">0</div><div style="font-size:12px;color:var(--text-muted);margin-top:4px">Intentos en Postfix</div></div>
+                <div class="card"><div class="card-header"><span class="card-title">Rebotes (24h)</span></div><div style="font-size:32px;font-weight:700" id="bounce-count-tab">0</div><div style="font-size:12px;color:var(--text-muted);margin-top:4px">Correos rebotados</div></div>
+                <div class="card"><div class="card-header"><span class="card-title">Diferidos (24h)</span></div><div style="font-size:32px;font-weight:700" id="deferred-count">0</div><div style="font-size:12px;color:var(--text-muted);margin-top:4px">En cola Postfix: <span id="queue-count">0</span></div></div>
+            </div>
+            <div style="margin-top:16px" class="grid grid-2">
+                <div class="card">
+                    <div class="card-header"><span class="card-title">Intentos Fallidos por Usuario/IP</span></div>
+                    <div style="max-height:280px;overflow-y:auto;margin-top:8px">
+                        <table><thead><tr><th>Usuario</th><th>IP</th><th>Intentos</th></tr></thead><tbody id="auth-fail-table"></tbody></table>
+                    </div>
+                </div>
+                <div class="card">
+                    <div class="card-header"><span class="card-title">Eventos de Autenticacion</span></div>
+                    <div id="auth-log-entries" style="max-height:280px;overflow-y:auto;margin-top:8px"></div>
+                </div>
+            </div>
+            <div style="margin-top:16px" class="card">
+                <div class="card-header"><span class="card-title">Log de Acceso al Sistema</span></div>
+                <div id="system-auth-log" style="max-height:360px;overflow-y:auto;margin-top:8px"></div>
+            </div>
+            <div style="margin-top:16px">
+                <div class="card">
+                    <div class="card-header">
+                        <span class="card-title">Bloqueo de IPs Sospechosas</span>
+                        <span style="font-size:11px;color:var(--text-muted)">Requiere password sudo para iptables</span>
+                    </div>
+                    <div style="display:flex;gap:8px;margin-bottom:12px">
+                        <input type="password" id="block-pwd" placeholder="Password sudo" style="flex:1;padding:8px 12px;background:var(--bg-secondary);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-size:13px;outline:none">
+                        <button onclick="fetchSuspiciousIPs()" style="padding:8px 16px;background:var(--accent);color:#fff;border:none;border-radius:var(--radius-sm);cursor:pointer;font-size:12px">Refrescar</button>
+                    </div>
+                    <div id="block-result" style="font-size:12px;margin-bottom:8px"></div>
+                    <div style="max-height:300px;overflow-y:auto">
+                        <table>
+                            <thead><tr><th>IP</th><th>Intentos</th><th>Accion</th></tr></thead>
+                            <tbody id="suspicious-ips-body"></tbody>
+                        </table>
+                    </div>
+                    <div style="margin-top:12px;font-size:11px;color:var(--text-muted)" id="blocked-summary"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+const TOKEN_KEY = 'carbonio_monitor_token';
+let charts = {};
+
+function login() {
+    const token = document.getElementById('token-input').value.trim();
+    if (!token) { showLoginError(); return; }
+    fetch(baseUrl('/api/v1/health') + '?token=' + encodeURIComponent(token))
+        .then(r => r.json())
+        .then(d => {
+            if (d.status === 'ok') {
+                localStorage.setItem(TOKEN_KEY, token);
+                document.getElementById('login-screen').style.display = 'none';
+                document.getElementById('dashboard').style.display = 'block';
+                initDashboard();
+            } else { showLoginError(); }
+        })
+        .catch(() => showLoginError());
+}
+function showLoginError() {
+    const el = document.getElementById('login-error');
+    el.style.display = 'block'; setTimeout(() => el.style.display = 'none', 3000);
+}
+function getToken() { return localStorage.getItem(TOKEN_KEY) || ''; }
+function baseUrl(path) {
+    const base = window.location.pathname.replace(/\/+$/, '');
+    const prefix = base === '' || base === '/' ? '' : base;
+    return prefix + path;
+}
+function api(path) {
+    const token = getToken();
+    return fetch(baseUrl(path) + (path.includes('?') ? '&' : '?') + 'token=' + encodeURIComponent(token)).then(r => r.json());
+}
+function fmtBytes(b) {
+    if (!b||b===0) return '0 B';
+    const k=1024, s=['B','KB','MB','GB']; const i=Math.floor(Math.log(b)/Math.log(k));
+    return parseFloat((b/Math.pow(k,i)).toFixed(1))+' '+s[i];
+}
+function fmtTime(ts) { return new Date((ts-21600)*1000).toLocaleTimeString('es-ES',{timeZone:'UTC'}); }
+function fmtDT(ts) { return new Date((ts-21600)*1000).toLocaleString('es-ES',{timeZone:'UTC'}); }
+function updateClock() {
+    document.getElementById('server-time').textContent = new Date(Date.now()-21600000).toLocaleString('es-ES',{timeZone:'UTC'});
+}
+
+function initDashboard() {
+    document.querySelectorAll('.tab-btn').forEach(tab => {
+        tab.addEventListener('click', () => {
+            document.querySelectorAll('.tab-btn').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+            tab.classList.add('active');
+            document.getElementById(tab.dataset.tab).classList.add('active');
+            if (tab.dataset.tab === 'tab-live') { fetchLiveFeed(); fetchAccounts(); }
+            if (tab.dataset.tab === 'tab-alerts') fetchAlerts();
+            if (tab.dataset.tab === 'tab-security') fetchSuspiciousIPs();
+        });
+    });
+    document.getElementById('token-input').addEventListener('keydown', e => { if (e.key === 'Enter') login(); });
+    loadData();
+    updateClock();
+    setInterval(loadData, 60000);
+    setInterval(fetchLiveFeed, 5000);
+    setInterval(fetchAlerts, 30000);
+    setInterval(fetchAccounts, 60000);
+    setInterval(fetchQueueCount, 10000);
+    setInterval(updateClock, 1000);
+}
+
+function loadData() {
+    api('/api/v1/full').then(data => {
+        if (data.error) return;
+        updateSummary(data.summary);
+        updateTimelineChart(data.timeline);
+        updateSendersChart(data.senders);
+        updateRecipientsChart(data.recipients);
+        updateDomainsChart(data.domains);
+        updateDeliveryChart(data);
+        updateResources(data.resources);
+        updateServices(data.services);
+        updateSecurity(data);
+        updateSystemAuthLog();
+        api('/api/v1/stats/senders?period=1h&limit=10').then(d => updateSendersChart60m(d)).catch(()=>{});
+        api('/api/v1/stats/recipients?period=1h&limit=10').then(d => updateRecipientsChart60m(d)).catch(()=>{});
+        if (data.live_feed) renderLiveFeed(data.live_feed);
+        if (data.alerts) renderAlerts(data.alerts);
+        if (data.accounts) renderAccounts(data.accounts);
+        document.getElementById('events-count').textContent = `${data.db_stats?.total_events||0} eventos`;
+        if (data.db_stats) {
+            document.getElementById('db-events').textContent = data.db_stats.total_events;
+            document.getElementById('db-last-event').textContent = data.db_stats.last_event_time
+                ? 'Ultimo: '+fmtDT(data.db_stats.last_event_time) : 'Ultimo: --';
+        }
+        fetchQueueCount();
+    }).catch(() => {});
+}
+
+function fetchQueueCount() {
+    api('/api/v1/system/queue').then(d => {
+        if (d.count === undefined) return;
+        document.getElementById('queue-count').textContent = d.count;
+        const badge = document.getElementById('queue-badge');
+        if (d.count > 0) {
+            badge.textContent = d.count;
+            badge.style.display = 'inline';
+        } else {
+            badge.style.display = 'none';
+        }
+    }).catch(() => {});
+}
+
+function updateSummary(s) {
+    if (!s) return;
+    const periods = [
+        {k:'5m',l:'Ultimos 5 min'},{k:'1h',l:'Ultima Hora'},{k:'24h',l:'Ultimas 24h'},{k:'1w',l:'Ultima Semana'},{k:'30d',l:'Ultimos 30 dias'}
+    ];
+    document.getElementById('summary-cards').innerHTML = periods.map(p => {
+        const d = s[p.k]||{total:0,outbound:0,inbound:0,bounced:0,deferred:0};
+        return `<div class="card stat-card">
+            <div class="icon-bg" style="background:var(--accent)">&#9993;</div>
+            <div class="label">${p.l}</div>
+            <div class="value">${d.total}</div>
+            <div class="meta">
+                <span class="meta-item"><span class="meta-dot" style="background:var(--cyan)"></span>Env ${d.outbound}</span>
+                <span class="meta-item"><span class="meta-dot" style="background:var(--accent)"></span>Rec ${d.inbound}</span>
+                <span class="meta-item"><span class="meta-dot" style="background:var(--red)"></span>Reb ${d.bounced}</span>
+                <span class="meta-item"><span class="meta-dot" style="background:var(--orange)"></span>Def ${d.deferred}</span>
+            </div>
+        </div>`;
+    }).join('');
+    if (s.auth_failures_24h !== undefined)
+        document.getElementById('auth-fail-count').textContent = s.auth_failures_24h;
+}
+
+function mkChart(id, type, labels, datasets, opts) {
+    const ctx = document.querySelector(`#${id} canvas`).getContext('2d');
+    if (charts[id]) charts[id].destroy();
+    charts[id] = new Chart(ctx, {
+        type,
+        data: {labels, datasets},
+        options: {
+            responsive:true, maintainAspectRatio:false,
+            plugins: {legend:{labels:{color:'#a1a1aa',boxWidth:12,font:{size:11}}}},
+            scales: {
+                x:{ticks:{color:'#52525b',maxTicksLimit:12},grid:{color:'#1f1f23'}},
+                y:{beginAtZero:true,ticks:{color:'#52525b',precision:0},grid:{color:'#1f1f23'}}
+            },
+            ...opts
+        }
+    });
+}
+
+function updateTimelineChart(d) {
+    mkChart('chart-timeline', 'bar', (d||[]).map(x=>fmtTime(x.timestamp)),
+        [{label:'Enviados',data:(d||[]).map(x=>x.outbound),backgroundColor:'rgba(6,182,212,0.5)',borderColor:'#06b6d4',borderWidth:1},
+         {label:'Recibidos',data:(d||[]).map(x=>x.inbound),backgroundColor:'rgba(59,130,246,0.5)',borderColor:'#3b82f6',borderWidth:1}]);
+}
+function updateSendersChart(d) {
+    mkChart('chart-senders', 'bar', (d||[]).map(x=>x.email),
+        [{label:'Correos',data:(d||[]).map(x=>x.count),backgroundColor:'rgba(6,182,212,0.6)',borderColor:'#06b6d4',borderWidth:1}],
+        {indexAxis:'y',plugins:{legend:{display:false}},
+         scales:{x:{beginAtZero:true,ticks:{color:'#52525b',precision:0},grid:{color:'#1f1f23'}},
+                y:{ticks:{color:'#a1a1aa',font:{size:9}},grid:{display:false}}}});
+}
+function updateRecipientsChart(d) {
+    mkChart('chart-recipients', 'bar', (d||[]).map(x=>x.email),
+        [{label:'Correos',data:(d||[]).map(x=>x.count),backgroundColor:'rgba(59,130,246,0.6)',borderColor:'#3b82f6',borderWidth:1}],
+        {indexAxis:'y',plugins:{legend:{display:false}},
+         scales:{x:{beginAtZero:true,ticks:{color:'#52525b',precision:0},grid:{color:'#1f1f23'}},
+                 y:{ticks:{color:'#a1a1aa',font:{size:10}},grid:{display:false}}}});
+}
+function updateSendersChart60m(d) {
+    if (charts['chart-senders-60m']) charts['chart-senders-60m'].destroy();
+    const ctx = document.querySelector('#chart-senders-60m canvas');
+    if (!ctx) return;
+    const labels = (d||[]).map(x=>x.email);
+    const vals = (d||[]).map(x=>x.count);
+    charts['chart-senders-60m'] = new Chart(ctx.getContext('2d'), {
+        type:'bar', data:{labels, datasets:[{label:'Correos (60m)',data:vals,backgroundColor:'rgba(6,182,212,0.6)',borderColor:'#06b6d4',borderWidth:1}]},
+        options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},
+            scales:{x:{beginAtZero:true,ticks:{color:'#52525b',precision:0},grid:{color:'#1f1f23'}},
+                    y:{ticks:{color:'#a1a1aa',font:{size:9}},grid:{display:false}}}}
+    });
+}
+function updateRecipientsChart60m(d) {
+    if (charts['chart-recipients-60m']) charts['chart-recipients-60m'].destroy();
+    const ctx = document.querySelector('#chart-recipients-60m canvas');
+    if (!ctx) return;
+    const labels = (d||[]).map(x=>x.email);
+    const vals = (d||[]).map(x=>x.count);
+    charts['chart-recipients-60m'] = new Chart(ctx.getContext('2d'), {
+        type:'bar', data:{labels, datasets:[{label:'Correos (60m)',data:vals,backgroundColor:'rgba(59,130,246,0.6)',borderColor:'#3b82f6',borderWidth:1}]},
+        options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},
+            scales:{x:{beginAtZero:true,ticks:{color:'#52525b',precision:0},grid:{color:'#1f1f23'}},
+                    y:{ticks:{color:'#a1a1aa',font:{size:10}},grid:{display:false}}}}
+    });
+}
+function updateDomainsChart(d) {
+    mkChart('chart-domains', 'doughnut', (d||[]).map(x=>x.domain),
+        [{data:(d||[]).map(x=>x.count),backgroundColor:['#06b6d4','#3b82f6','#a855f7','#f59e0b','#ef4444','#22c55e','#52525b','#a1a1aa','#fafafa','#111113']}],
+        {plugins:{legend:{position:'right',labels:{color:'#a1a1aa',boxWidth:12,font:{size:10}}}}});
+}
+function updateDeliveryChart(data) {
+    if (!data.bounces) return;
+    const sent = data.bounces.total - data.bounces.bounced;
+    mkChart('chart-delivery', 'doughnut', ['Entregados','Rebotados'],
+        [{data:[sent,data.bounces.bounced],backgroundColor:['rgba(34,197,94,0.7)','rgba(239,68,68,0.7)']}],
+        {plugins:{legend:{position:'right',labels:{color:'#a1a1aa',boxWidth:12}}}});
+    document.getElementById('bounce-rate').textContent = data.bounces.rate+'%';
+    document.getElementById('bounce-detail').textContent = `${data.bounces.total} enviados, ${data.bounces.bounced} rebotados`;
+    document.getElementById('bounce-count-tab').textContent = data.bounces.bounced;
+    if (data.delivery) {
+        document.getElementById('avg-delivery').textContent = data.delivery.avg_delay+'s';
+        document.getElementById('delivery-detail').textContent = `Min: ${data.delivery.min_delay}s / Max: ${data.delivery.max_delay}s`;
+    }
+}
+
+function updateResources(r) {
+    if (!r) return;
+    const cpu = r.cpu_percent||0;
+    document.getElementById('cpu-value').textContent = cpu+'%';
+    document.getElementById('cpu-bar').style.width = Math.min(cpu,100)+'%';
+    const cpuCls = cpu>80?'progress-red':cpu>50?'progress-yellow':'progress-green';
+    document.getElementById('cpu-bar').className = 'progress-fill '+cpuCls;
+    if (r.load) document.getElementById('cpu-load').textContent = `Load: ${r.load.load_1m} / ${r.load.load_5m} / ${r.load.load_15m}`;
+    if (r.memory) {
+        const m = r.memory;
+        document.getElementById('mem-value').textContent = m.percent+'%';
+        document.getElementById('mem-bar').style.width = Math.min(m.percent,100)+'%';
+        const mCls = m.percent>80?'progress-red':m.percent>50?'progress-yellow':'progress-green';
+        document.getElementById('mem-bar').className = 'progress-fill '+mCls;
+        document.getElementById('mem-detail').textContent = `${m.used_mb} MB / ${m.total_mb} MB`;
+    }
+    if (r.disk&&r.disk[0]) {
+        const d = r.disk[0];
+        document.getElementById('disk-value').textContent = d.percent+'%';
+        document.getElementById('disk-bar').style.width = Math.min(d.percent,100)+'%';
+        const dCls = d.percent>80?'progress-red':d.percent>50?'progress-yellow':'progress-green';
+        document.getElementById('disk-bar').className = 'progress-fill '+dCls;
+        document.getElementById('disk-detail').textContent = `${d.used_gb} GB / ${d.total_gb} GB`;
+    }
+    if (r.uptime) document.getElementById('uptime-value').textContent = r.uptime.uptime_str;
+    if (r.load) {
+        document.getElementById('procs-info').textContent = `${r.load.procs_running} act / ${r.load.procs_total} tot`;
+        document.getElementById('load-1m').textContent = r.load.load_1m;
+    }
+    if (r.swap) document.getElementById('swap-value').textContent = r.swap.percent+'%';
+    if (r.network) {
+        document.getElementById('net-info').innerHTML = `
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+                <div><span style="font-size:11px;color:var(--text-muted)">RX (instantanéo)</span><div style="font-size:14px;font-weight:600">${fmtBytes(r.network.total_rx_speed||0)}/s</div></div>
+                <div><span style="font-size:11px;color:var(--text-muted)">TX (instantanéo)</span><div style="font-size:14px;font-weight:600">${fmtBytes(r.network.total_tx_speed||0)}/s</div></div>
+                <div><span style="font-size:11px;color:var(--text-muted)">RX Total (acumulado)</span><div style="font-size:14px;font-weight:600">${fmtBytes(r.network.total_rx_bytes)}</div></div>
+                <div><span style="font-size:11px;color:var(--text-muted)">TX Total (acumulado)</span><div style="font-size:14px;font-weight:600">${fmtBytes(r.network.total_tx_bytes)}</div></div>
+            </div>`;
+        updateNetworkChart(r);
+    }
+    document.getElementById('system-resources').innerHTML = `
+        <div class="resource-grid">
+            <div><div class="resource-label">CPU</div><div class="resource-value">${cpu}%</div></div>
+            <div><div class="resource-label">RAM</div><div class="resource-value">${r.memory?r.memory.percent+'%':'N/A'}</div></div>
+            <div><div class="resource-label">Disco</div><div class="resource-value">${r.disk&&r.disk[0]?r.disk[0].percent+'%':'N/A'}</div></div>
+            <div><div class="resource-label">Uptime</div><div class="resource-value">${r.uptime?r.uptime.uptime_str:'N/A'}</div></div>
+            <div><div class="resource-label">Carga</div><div class="resource-value">${r.load?r.load.load_1m+'/'+r.load.load_5m+'/'+r.load.load_15m:'N/A'}</div></div>
+            <div><div class="resource-label">Swap</div><div class="resource-value">${r.swap?r.swap.percent+'%':'0%'}</div></div>
+        </div>`;
+}
+
+function updateNetworkChart(r) {
+    if (!r.network||!r.network.interfaces) return;
+    const ifaces = Object.keys(r.network.interfaces).filter(k=>k!=='_total');
+    const rx = ifaces.map(k=>r.network.interfaces[k].rx_speed);
+    const tx = ifaces.map(k=>r.network.interfaces[k].tx_speed);
+    mkChart('chart-network','bar', ifaces,
+        [{label:'RX (B/s instantaneo)',data:rx,backgroundColor:'rgba(59,130,246,0.5)',borderColor:'#3b82f6',borderWidth:1},
+         {label:'TX (B/s instantaneo)',data:tx,backgroundColor:'rgba(245,158,11,0.5)',borderColor:'#f59e0b',borderWidth:1}],
+        {scales:{y:{beginAtZero:true,ticks:{color:'#52525b',callback:v=>fmtBytes(v)},grid:{color:'#1f1f23'}}}});
+}
+
+function updateServices(srv) {
+    if (!srv) return;
+    const svcs = srv.services||{};
+    const render = (name,status) => {
+        const cls = status==='active'?'badge-active':status==='inactive'?'badge-inactive':'badge-warning';
+        const label = status==='active'?'Activo':status==='inactive'?'Inactivo':status;
+        return `<div class="service-item"><span>${name}</span><span class="badge ${cls}">${label}</span></div>`;
+    };
+    document.getElementById('services-status').innerHTML = Object.entries(svcs).map(([n,s])=>render(n,s)).join('');
+    document.getElementById('services-full').innerHTML = Object.entries(svcs).map(([n,s])=>render(n,s)).join('');
+    document.getElementById('service-count').textContent = `${srv.active}/${srv.total} activos`;
+    document.getElementById('service-count-full').textContent = `${srv.active}/${srv.total} activos`;
+}
+
+function updateSecurity(data) {
+    if (data.summary&&data.summary['24h'])
+        document.getElementById('deferred-count').textContent = data.summary['24h'].deferred||0;
+    if (data.auth_failures) {
+        document.getElementById('auth-fail-table').innerHTML = data.auth_failures.map(f =>
+            `<tr><td>${f.username||'?'}</td><td>${f.ip||'?'}</td><td style="color:var(--red);font-weight:600">${f.attempts}</td></tr>`
+        ).join('')||'<tr><td colspan="3" style="text-align:center;color:var(--text-muted)">Sin intentos fallidos</td></tr>';
+    }
+}
+
+function updateSystemAuthLog() {
+    api('/api/v1/system/auth-logs?limit=30').then(data => {
+        const c = document.getElementById('system-auth-log');
+        if (!Array.isArray(data)) { c.innerHTML='<div style="color:var(--text-muted)">No disponible</div>'; return; }
+        c.innerHTML = data.map(e => {
+            const cls = e.status==='failed'||e.status==='invalid_user'?'failed':e.status==='success'?'success':'warning';
+            return `<div class="auth-entry ${cls}">
+                <div style="display:flex;justify-content:space-between;align-items:center">
+                    <span style="font-weight:600;color:var(--text)">${e.user||'?'}</span>
+                    <span style="color:var(--text-muted);font-size:11px">${e.datetime||''}</span>
+                </div>
+                <div style="margin-top:4px;color:var(--text-secondary)">${e.ip?'IP: '+e.ip:''} ${e.message||''}</div>
+            </div>`;
+        }).join('')||'<div style="color:var(--text-muted)">Sin eventos registrados</div>';
+    }).catch(()=>{});
+}
+
+function fetchSuspiciousIPs() {
+    const pwd = document.getElementById('block-pwd').value;
+    const base = baseUrl('/api/v1/security/suspicious-ips') + '?token=' + encodeURIComponent(getToken());
+    const url = pwd ? base + '&password=' + encodeURIComponent(pwd) : base;
+    fetch(url).then(r => r.json()).then(data => {
+        if (!Array.isArray(data)) return;
+        const tbody = document.getElementById('suspicious-ips-body');
+        tbody.innerHTML = data.map(ip => {
+            const btnClass = ip.blocked ? 'btn-unblock' : 'btn-disable';
+            const btnText = ip.blocked ? 'Desbloquear' : 'Bloquear';
+            const action = ip.blocked ? 'unblockIP' : 'blockIP';
+            return '<tr><td style="font-family:monospace;font-size:12px">' + ip.ip + '</td>' +
+                '<td style="font-weight:600;color:var(--red)">' + ip.attempts + '</td>' +
+                '<td><button class="' + btnClass + '" data-ip="' + ip.ip + '" onclick="' + action + '(this)">' + btnText + '</button></td></tr>';
+        }).join('') || '<tr><td colspan="3" style="text-align:center;color:var(--text-muted)">Sin IPs sospechosas</td></tr>';
+    }).catch(()=>{});
+
+    const base2 = baseUrl('/api/v1/security/blocked-ips') + '?token=' + encodeURIComponent(getToken());
+    const url2 = pwd ? base2 + '&password=' + encodeURIComponent(pwd) : base2;
+    fetch(url2).then(r => r.json()).then(d => {
+        document.getElementById('blocked-summary').textContent = 'IPs bloqueadas: ' + (d.count||0);
+    }).catch(()=>{});
+}
+
+function blockIP(btn) {
+    const ip = btn.dataset.ip;
+    const pwd = document.getElementById('block-pwd').value;
+    const resultDiv = document.getElementById('block-result');
+    if (!pwd) { resultDiv.innerHTML = '<span style="color:var(--red)">Ingrese password sudo</span>'; return; }
+    btn.disabled = true;
+    btn.textContent = 'Bloqueando...';
+    const url = baseUrl('/api/v1/security/block-ip') + '?token=' + encodeURIComponent(getToken()) +
+        '&ip=' + encodeURIComponent(ip) + '&password=' + encodeURIComponent(pwd);
+    fetch(url).then(r => r.json()).then(d => {
+        if (d.status === 'ok') {
+            resultDiv.innerHTML = '<span style="color:var(--green)">' + d.message + '</span>';
+            fetchSuspiciousIPs();
+        } else {
+            resultDiv.innerHTML = '<span style="color:var(--red)">Error: ' + d.message + '</span>';
+            btn.disabled = false;
+            btn.textContent = 'Bloquear';
+        }
+    }).catch(() => { btn.disabled = false; btn.textContent = 'Bloquear'; });
+}
+
+function unblockIP(btn) {
+    const ip = btn.dataset.ip;
+    const pwd = document.getElementById('block-pwd').value;
+    const resultDiv = document.getElementById('block-result');
+    if (!pwd) { resultDiv.innerHTML = '<span style="color:var(--red)">Ingrese password sudo</span>'; return; }
+    btn.disabled = true;
+    btn.textContent = 'Desbloqueando...';
+    const url = baseUrl('/api/v1/security/unblock-ip') + '?token=' + encodeURIComponent(getToken()) +
+        '&ip=' + encodeURIComponent(ip) + '&password=' + encodeURIComponent(pwd);
+    fetch(url).then(r => r.json()).then(d => {
+        if (d.status === 'ok') {
+            resultDiv.innerHTML = '<span style="color:var(--green)">' + d.message + '</span>';
+            fetchSuspiciousIPs();
+        } else {
+            resultDiv.innerHTML = '<span style="color:var(--red)">Error: ' + d.message + '</span>';
+            btn.disabled = false;
+            btn.textContent = 'Desbloquear';
+        }
+    }).catch(() => { btn.disabled = false; btn.textContent = 'Desbloquear'; });
+}
+
+function fetchLiveFeed() {
+    api('/api/v1/live-feed?limit=100').then(d => { if (Array.isArray(d)) renderLiveFeed(d); }).catch(()=>{});
+}
+function renderLiveFeed(d) {
+    document.getElementById('live-count').textContent = `${d.length} eventos`;
+    document.getElementById('live-feed-body').innerHTML = d.map(e => {
+        const sc = e.status==='sent'?'s-sent':e.status==='bounced'?'s-bounced':e.status==='deferred'?'s-deferred':'';
+        const s = e.size ? (e.size>1024?(e.size/1024).toFixed(1)+'KB':e.size+'B') : '-';
+        const ip = e.client_ip || e.relay || '-';
+        return `<tr><td>${e.datetime||''}</td><td class="max-w" title="${e.from||''}">${e.from||'-'}</td>
+            <td class="max-w" title="${e.to||''}">${e.to||'-'}</td>
+            <td style="font-size:10px;font-family:monospace">${ip}</td><td>${s}</td>
+            <td>${e.direction==='outbound'?'\u2191':'\u2193'}</td>
+            <td class="${sc}">${e.status||''}</td><td>${e.delay?e.delay.toFixed(1)+'s':'-'}</td></tr>`;
+    }).join('');
+}
+function fetchAlerts() {
+    api('/api/v1/alerts?limit=50').then(d => { if (Array.isArray(d)) renderAlerts(d); }).catch(()=>{});
+}
+function renderAlerts(d) {
+    const c = document.getElementById('alerts-list');
+    document.getElementById('alerts-count').textContent = `${d.length} alertas`;
+    if (!d.length) { c.innerHTML='<div style="text-align:center;padding:40px;color:var(--text-muted)">No hay alertas activas</div>'; return; }
+    c.innerHTML = d.map(a => {
+        const bt = a.type==='spam'?'spam':a.type==='auth_attack'?'auth':'bounce';
+        const bl = a.type==='spam'?'SPAM':a.type==='auth_attack'?'ATAQUE':'REBOTE';
+        return `<div class="alert-item ${a.severity}">
+            <div class="alert-top">
+                <div><span class="alert-type ${bt}">${bl}</span><span class="alert-time" style="margin-left:8px">${a.datetime||''}</span></div>
+                <span class="alert-severity" style="color:${a.severity==='critical'?'var(--red)':a.severity==='high'?'var(--orange)':'var(--text-muted)'}">${a.severity}</span>
+            </div>
+            <div class="alert-title">${a.title||''}</div>
+            <div class="alert-desc">${a.description||''}</div>
+        </div>`;
+    }).join('');
+}
+
+function fetchAccounts() {
+    api('/api/v1/accounts/summary?limit=50').then(d => {
+        if (Array.isArray(d)) renderAccounts(d);
+    }).catch(()=>{});
+}
+
+function renderAccounts(data) {
+    const tbody = document.getElementById('accounts-body');
+    document.getElementById('accounts-count').textContent = `${data.length} cuentas`;
+    const STATUS_MAP = {
+        'active':      { badge: 'badge-active',   label: 'Activa',       btn: true,  btnClass: 'btn-disable', btnText: 'Desactivar' },
+        'closed':      { badge: 'badge-inactive', label: 'Desactivada',  btn: false, btnClass: '',           btnText: 'Bloqueada' },
+        'lockout':     { badge: 'badge-inactive', label: 'Bloqueada',    btn: false, btnClass: '',           btnText: 'Bloqueada' },
+        'maintenance': { badge: 'badge-warning',  label: 'Mantenimiento',btn: false, btnClass: '',           btnText: 'En mantenimiento' },
+        'disabled':    { badge: 'badge-inactive', label: 'Desactivada',  btn: false, btnClass: '',           btnText: 'Bloqueada' },
+    };
+    tbody.innerHTML = data.map(a => {
+        const email = a.email || '';
+        const display = email.length > 30 ? email.substring(0, 27) + '...' : email;
+        const cfg = STATUS_MAP[a.status] || STATUS_MAP.active;
+        const statusBadge = `<span class="badge ${cfg.badge}" style="font-size:10px">${cfg.label}</span>`;
+        const btnHtml = cfg.btn
+            ? `<button class="btn-disable" data-email="${email}" onclick="disableAccount(this)">${cfg.btnText}</button>`
+            : `<span style="color:var(--text-muted);font-size:11px">${cfg.btnText}</span>`;
+        return `<tr>
+            <td title="${email}">${display} ${statusBadge}</td>
+            <td style="font-weight:600">${a.count_30d || 0}</td>
+            <td>${a.count_24h || 0}</td>
+            <td>${btnHtml}</td>
+        </tr>`;
+    }).join('');
+}
+
+function disableAccount(btn) {
+    const email = btn.dataset.email;
+    const resultDiv = document.getElementById('disable-result');
+    resultDiv.innerHTML = '';
+    showPasswordModal(email, btn, resultDiv);
+}
+
+function showPasswordModal(email, btn, resultDiv) {
+    const existing = document.getElementById('pwd-modal');
+    if (existing) existing.remove();
+    const overlay = document.createElement('div');
+    overlay.id = 'pwd-modal';
+    overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.7);z-index:9999;display:flex;justify-content:center;align-items:center';
+    overlay.innerHTML = `<div style="background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:28px;width:400px;max-width:90vw">
+        <h3 style="margin-bottom:8px;font-size:16px">Desactivar cuenta</h3>
+        <p style="font-size:13px;color:var(--text-secondary);margin-bottom:16px">
+            Ingrese su password de sudo para desactivar <strong>${email}</strong>
+        </p>
+        <input type="password" id="pwd-input" placeholder="Password de sudo" style="width:100%;padding:10px 14px;background:var(--bg-secondary);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-size:14px;outline:none">
+        <div id="pwd-error" style="color:var(--red);font-size:12px;margin-top:8px;display:none"></div>
+        <div style="display:flex;gap:8px;margin-top:16px">
+            <button id="pwd-cancel" style="flex:1;padding:10px;background:var(--bg-secondary);border:1px solid var(--border);color:var(--text-secondary);border-radius:var(--radius-sm);cursor:pointer;font-size:13px">Cancelar</button>
+            <button id="pwd-confirm" style="flex:1;padding:10px;background:var(--red);border:none;color:#fff;border-radius:var(--radius-sm);cursor:pointer;font-size:13px;font-weight:600">Desactivar</button>
+        </div>
+        <div id="pwd-loading" style="text-align:center;margin-top:12px;display:none;color:var(--text-muted);font-size:13px">Desactivando...</div>
+    </div>`;
+    document.body.appendChild(overlay);
+    document.getElementById('pwd-cancel').onclick = () => overlay.remove();
+    document.getElementById('pwd-input').focus();
+    document.getElementById('pwd-input').onkeydown = (e) => { if (e.key === 'Enter') doDisable(); };
+    document.getElementById('pwd-confirm').onclick = doDisable;
+
+    function doDisable() {
+        const pwd = document.getElementById('pwd-input').value;
+        if (!pwd) { showPwdError('Ingrese el password'); return; }
+        document.getElementById('pwd-error').style.display = 'none';
+        document.getElementById('pwd-loading').style.display = 'block';
+        document.getElementById('pwd-confirm').disabled = true;
+        btn.disabled = true;
+        btn.textContent = 'Desactivando...';
+        const url = baseUrl('/api/v1/accounts/disable') + '?email=' + encodeURIComponent(email) + '&password=' + encodeURIComponent(pwd) + '&token=' + encodeURIComponent(getToken());
+        fetch(url).then(r => r.json()).then(d => {
+            overlay.remove();
+            if (d.status === 'ok') {
+                resultDiv.innerHTML = '<div style="padding:10px 14px;background:var(--green-bg);border-radius:var(--radius-sm);color:var(--green);font-size:13px;font-weight:500">Cuenta desactivada: ' + email + '</div>';
+                btn.textContent = 'Desactivada';
+                btn.style.background = 'var(--green)';
+                btn.style.color = '#fff';
+                btn.disabled = true;
+                fetchAccounts();
+            } else if (d.status === 'partial') {
+                resultDiv.innerHTML = '<div style="padding:10px 14px;background:var(--orange-bg);border-radius:var(--radius-sm);color:var(--orange);font-size:13px;font-weight:500">Desactivacion pendiente: ' + email + '</div>' +
+                    '<div style="margin-top:6px;font-size:11px;color:var(--text-muted)">Se marco en el monitor. Para desactivar en Carbonio: <code style="background:var(--bg-secondary);padding:2px 6px;border-radius:3px">' + d.manual_command + '</code></div>';
+                btn.textContent = 'Desactivada';
+                btn.style.background = 'var(--orange)';
+                btn.style.color = '#fff';
+                btn.disabled = true;
+                fetchAccounts();
+            } else {
+                let html = '<div style="padding:10px 14px;background:var(--red-bg);border-radius:var(--radius-sm);color:var(--red);font-size:13px">Error: ' + (d.message || 'Desconocido') + '</div>';
+                if (d.manual_command) {
+                    html += '<div style="margin-top:6px;font-size:11px;color:var(--text-muted)">Manual: <code style="background:var(--bg-secondary);padding:2px 6px;border-radius:3px">' + d.manual_command + '</code></div>';
+                }
+                resultDiv.innerHTML = html;
+                btn.disabled = false;
+                btn.textContent = 'Desactivar';
+            }
+        }).catch(() => {
+            overlay.remove();
+            resultDiv.innerHTML = '<div style="padding:10px 14px;background:var(--red-bg);border-radius:var(--radius-sm);color:var(--red);font-size:13px">Error de conexion</div>';
+            btn.disabled = false;
+            btn.textContent = 'Desactivar';
+        });
+    }
+    function showPwdError(msg) {
+        const el = document.getElementById('pwd-error');
+        el.textContent = msg; el.style.display = 'block';
+    }
+}
+
+const savedToken = localStorage.getItem(TOKEN_KEY);
+if (savedToken) {
+    fetch(baseUrl('/api/v1/health') + '?token=' + encodeURIComponent(savedToken))
+        .then(r=>r.json()).then(d => {
+            if (d.status==='ok') {
+                document.getElementById('login-screen').style.display='none';
+                document.getElementById('dashboard').style.display='block';
+                initDashboard();
+            } else { localStorage.removeItem(TOKEN_KEY); }
+        }).catch(()=>{});
+}
+</script>
+</body>
+</html>
